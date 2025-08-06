@@ -1,0 +1,29 @@
+def main():
+    # Replace with your Polygon API key
+    API_KEY = "YOUR_POLYGON_API_KEY_HERE"
+    
+    # Create scanner instance
+    scanner = StockScanner(API_KEY)
+    
+    # Run all scanning strategies (limit=100 to avoid API rate limits)
+    scanner.run_all_scans(min_price=5, limit=100)
+    
+    # Plot the strategy counts
+    scanner.plot_strategy_counts()
+    
+    # Save all results to CSV files
+    scanner.save_results()
+    
+    # Find stocks in multiple strategies
+    multi_stocks = scanner.find_stocks_in_multiple_strategies(min_strategies=2)
+    
+    if not multi_stocks.empty:
+        # Generate chart for top multi-strategy stock
+        top_ticker = multi_stocks['ticker'].iloc
+        print(f"\nGenerating chart for top stock: {top_ticker}")
+        scanner.plot_stock_chart(top_ticker)
+    
+    print("\nScan complete! Results saved to CSV files.")
+
+if __name__ == "__main__":
+    main()
