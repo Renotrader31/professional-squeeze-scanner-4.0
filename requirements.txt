@@ -1,0 +1,7 @@
+streamlit
+pandas
+numpy
+plotly
+polygon-api-client
+requests
+matplotlib

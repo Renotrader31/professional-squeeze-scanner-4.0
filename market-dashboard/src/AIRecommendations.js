@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Brain, TrendingUp, AlertCircle, Target, Zap, ChevronRight, Star, BarChart2 } from 'lucide-react';
+import AITradeRecommendations from './AITradeRecommendations';
 
 function AIRecommendations({ marketData, scannerResults, selectedSymbol }) {
   const [recommendations, setRecommendations] = useState([]);
   const [analysis, setAnalysis] = useState(null);
   const [confidence, setConfidence] = useState(0);
+const [manualSymbol, setManualSymbol] = useState('');
 
   // Generate AI-like recommendations based on data patterns
   const generateRecommendations = () => {
@@ -90,13 +92,57 @@ function AIRecommendations({ marketData, scannerResults, selectedSymbol }) {
 
     setRecommendations(recs);
   };
+const generateDetailedAnalysis = async (symbol) => {  // Add async
+  if (!symbol) return;
 
-  // Generate detailed analysis for selected symbol
-  const generateDetailedAnalysis = (symbol) => {
-    if (!symbol) return;
-
-    const stockData = scannerResults?.find(s => s.symbol === symbol) || {};
-    const price = stockData.price || 100;
+  let stockData = scannerResults?.find(s => s.symbol === symbol);
+  
+  if (!stockData) {
+    // Try to fetch real data first
+    try {
+      // If you have API keys configured, try to fetch real price
+      const response = await fetch(
+        `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=demo`
+      );
+      const data = await response.json();
+      
+      if (data['Global Quote']) {
+        const quote = data['Global Quote'];
+        stockData = {
+          symbol: symbol,
+          price: parseFloat(quote['05. price']) || 100,
+          change: parseFloat(quote['09. change']) || 0,
+          changePercent: parseFloat(quote['10. change percent']?.replace('%', '')) || 0,
+          volume: parseInt(quote['06. volume']) || 50000000,
+          squeezeScore: Math.random() * 100,
+          momentumScore: Math.random() * 100,
+          flowScore: Math.random() * 100,
+          shortInterest: Math.random() * 30,
+          borrowRate: Math.random() * 50,
+          daysToCover: Math.random() * 10
+        };
+      }
+    } catch (error) {
+      console.log('API fetch failed, using mock data');
+    }
+    
+    // Fallback to mock data if API fails
+    if (!stockData) {
+      stockData = {
+        symbol: symbol,
+        price: 100 + Math.random() * 200,
+        // ... rest of mock data
+      };
+    }
+    
+    // Add to scanner results (if you want it to persist)
+    // This is optional - comment out if you don't want to modify the list
+    if (scannerResults) {
+      scannerResults.push(stockData);
+    }
+  }
+    const stock = scannerResults?.find(s => s.symbol === symbol) || {};
+    const price = stock.price || 100;
     
     setAnalysis({
       symbol: symbol,
@@ -342,13 +388,30 @@ function AIRecommendations({ marketData, scannerResults, selectedSymbol }) {
               </ul>
             </div>
           </div>
-
-          <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 rounded-lg p-4 border border-blue-500/30">
+<div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 rounded-lg p-4 border border-blue-500/30">
             <p className="text-sm font-semibold text-blue-400 mb-1">AI RECOMMENDATION</p>
             <p className="text-white">{analysis.recommendation}</p>
           </div>
         </div>
       )}
+      
+      {/* Trade Recommendations - Simple Version */}
+      {(selectedSymbol || analysis?.symbol) && (
+        <AITradeRecommendations 
+          stockData={scannerResults?.find(s => s.symbol === (selectedSymbol || analysis?.symbol)) || {
+            symbol: selectedSymbol || analysis?.symbol,
+            price: 100,
+            momentumScore: 50,
+            squeezeScore: 50,
+            iv: 30,
+            volume: 50000000,
+            change: 0,
+            changePercent: 0
+          }}
+          symbol={selectedSymbol || analysis?.symbol}
+        />
+      )}
+      
     </div>
   );
 }

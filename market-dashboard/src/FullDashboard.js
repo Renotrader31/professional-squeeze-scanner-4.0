@@ -1,8 +1,9 @@
-import './dashboard.css';
 import React, { useState, useEffect, useCallback } from 'react';
 import AIRecommendations from './AIRecommendations';
 import MarketStatus from './MarketStatus';
-import {
+import { ALL_STOCKS, TOP_MOVERS, SQUEEZE_WATCH } from './StockUniverse';
+import AITradeRecommendations from './AITradeRecommendations';
+import { 
   TrendingUp, 
   Activity, 
   BarChart3, 
@@ -10,7 +11,6 @@ import {
   Target,
   AlertTriangle,
   DollarSign,
-  Eye,
   RefreshCw,
   Settings,
   Play,
@@ -58,17 +58,16 @@ function FullDashboard() {
 
   // Tab Configuration
   const tabs = [
-    { id: 'ai', name: 'AI Intel', icon: <Brain className="w-4 h-4" /> }, 
+    { id: 'ai', name: 'AI Intel', icon: <Brain className="w-4 h-4" /> },
     { id: 'scanner', name: 'Scanner', icon: <Activity className="w-4 h-4" /> },
     { id: 'gex', name: 'GEX Analysis', icon: <BarChart3 className="w-4 h-4" /> },
     { id: 'flow', name: 'Options Flow', icon: <Zap className="w-4 h-4" /> },
     { id: 'squeeze', name: 'Squeeze Tracker', icon: <Target className="w-4 h-4" /> },
-    { id: 'alerts', name: 'Alerts', icon: <AlertTriangle className="w-4 h-4" /> },
-    { id: 'watchlist', name: 'Watchlist', icon: <Eye className="w-4 h-4" /> }
+    { id: 'alerts', name: 'Alerts', icon: <AlertTriangle className="w-4 h-4" /> }
   ];
 
-  // Popular tickers to scan
-  const SCAN_SYMBOLS = ['AAPL', 'TSLA', 'NVDA', 'AMD', 'SPY', 'QQQ', 'META', 'GOOGL', 'MSFT', 'AMZN'];
+  // Use expanded stock list
+  const SCAN_SYMBOLS = ALL_STOCKS ? ALL_STOCKS.slice(0, 100) : ['AAPL', 'TSLA', 'NVDA', 'AMD', 'SPY', 'QQQ'];
 
   // Fetch price data from multiple sources
   const fetchPriceData = async (symbol) => {
@@ -208,7 +207,7 @@ function FullDashboard() {
       flows.push({
         id: i,
         time: new Date(Date.now() - Math.random() * 3600000).toLocaleTimeString(),
-        symbol: SCAN_SYMBOLS[Math.floor(Math.random() * SCAN_SYMBOLS.length)],
+        symbol: SCAN_SYMBOLS[Math.floor(Math.random() * Math.min(SCAN_SYMBOLS.length, 20))],
         type: isCall ? 'CALL' : 'PUT',
         strike,
         expiry: '2024-12-20',
@@ -298,32 +297,41 @@ function FullDashboard() {
     runScanner();
   }, []);
 
-  // Format helpers
+  // Format helpers with safety checks
   const formatNumber = (num) => {
-    if (!num) return '0';
-    if (Math.abs(num) >= 1e9) return (num / 1e9).toFixed(2) + 'B';
-    if (Math.abs(num) >= 1e6) return (num / 1e6).toFixed(2) + 'M';
-    if (Math.abs(num) >= 1e3) return (num / 1e3).toFixed(2) + 'K';
-    return num.toFixed(2);
+    if (num === null || num === undefined) return '0';
+    const n = parseFloat(num);
+    if (isNaN(n)) return '0';
+    if (Math.abs(n) >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+    if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+    if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(2) + 'K';
+    return n.toFixed(2);
   };
 
-  const formatPrice = (price) => `$${price?.toFixed(2) || '0.00'}`;
+  const formatPrice = (price) => {
+    if (price === null || price === undefined) return '$0.00';
+    const p = parseFloat(price);
+    if (isNaN(p)) return '$0.00';
+    return '$' + p.toFixed(2);
+  };
+
   const formatPercent = (percent) => {
-    const formatted = percent?.toFixed(2) || '0.00';
-    return percent >= 0 ? `+${formatted}%` : `${formatted}%`;
+    if (percent === null || percent === undefined) return '0.00%';
+    const p = parseFloat(percent);
+    if (isNaN(p)) return '0.00%';
+    const formatted = p.toFixed(2) + '%';
+    return p >= 0 ? '+' + formatted : formatted;
   };
 
   // Render different tab content
   const renderTabContent = () => {
     switch (activeTab) {
- case 'ai':  // ADD THIS CASE
-      return <AIRecommendations 
-        marketData={marketData} 
-        scannerResults={scannerResults} 
-        selectedSymbol={selectedSymbol} 
-      />;
-    case 'scanner':
-      return <ScannerTab results={scannerResults} onSelectSymbol={handleSelectSymbol} />;
+      case 'ai':
+        return <AIRecommendations 
+          marketData={marketData} 
+          scannerResults={scannerResults} 
+          selectedSymbol={selectedSymbol} 
+        />;
       case 'scanner':
         return <ScannerTab results={scannerResults} onSelectSymbol={handleSelectSymbol} />;
       case 'gex':
@@ -334,8 +342,6 @@ function FullDashboard() {
         return <SqueezeTab results={scannerResults.filter(r => r.squeezeScore > 40)} />;
       case 'alerts':
         return <AlertsTab />;
-      case 'watchlist':
-        return <WatchlistTab symbols={SCAN_SYMBOLS} marketData={marketData} />;
       default:
         return null;
     }
@@ -379,16 +385,16 @@ function FullDashboard() {
           <tbody className="divide-y divide-gray-800">
             {results.map((result) => (
               <tr key={result.symbol} className="hover:bg-gray-800 transition-colors">
-                <td className="px-4 py-3 text-white">#{result.rank}</td>
+                <td className="px-4 py-3 text-white">#{result.rank || 0}</td>
                 <td className="px-4 py-3 text-white font-bold">{result.symbol}</td>
                 <td className="px-4 py-3 text-white">{formatPrice(result.price)}</td>
-                <td className={`px-4 py-3 font-bold ${result.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                <td className={`px-4 py-3 font-bold ${(result.change || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                   {formatPercent(result.changePercent)}
                 </td>
                 <td className="px-4 py-3 text-white">{formatNumber(result.volume)}</td>
                 <td className="px-4 py-3">
                   <div className="flex gap-1">
-                    {result.signals.map((signal, i) => (
+                    {(result.signals || []).map((signal, i) => (
                       <span key={i} className="px-2 py-1 text-xs bg-yellow-500 bg-opacity-20 text-yellow-400 rounded">
                         {signal}
                       </span>
@@ -400,10 +406,10 @@ function FullDashboard() {
                     <div className="w-20 bg-gray-700 rounded-full h-2">
                       <div 
                         className="bg-gradient-to-r from-green-500 to-blue-500 h-2 rounded-full"
-                        style={{ width: `${result.totalScore}%` }}
+                        style={{ width: `${Math.min(result.totalScore || 0, 100)}%` }}
                       />
                     </div>
-                    <span className="text-white text-sm">{result.totalScore.toFixed(0)}</span>
+                    <span className="text-white text-sm">{(result.totalScore || 0).toFixed(0)}</span>
                   </div>
                 </td>
                 <td className="px-4 py-3">
@@ -571,19 +577,19 @@ function FullDashboard() {
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-gray-400">Short Interest</span>
-                <span className="text-white">{stock.shortInterest.toFixed(2)}%</span>
+                <span className="text-white">{(stock.shortInterest || 0).toFixed(2)}%</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Borrow Rate</span>
-                <span className="text-white">{stock.borrowRate.toFixed(2)}%</span>
+                <span className="text-white">{(stock.borrowRate || 0).toFixed(2)}%</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Days to Cover</span>
-                <span className="text-white">{stock.daysToCover.toFixed(1)}</span>
+                <span className="text-white">{(stock.daysToCover || 0).toFixed(1)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Utilization</span>
-                <span className="text-white">{stock.utilizationRate.toFixed(1)}%</span>
+                <span className="text-white">{(stock.utilizationRate || 0).toFixed(1)}%</span>
               </div>
             </div>
             
@@ -598,10 +604,10 @@ function FullDashboard() {
                         stock.squeezeScore > 40 ? 'bg-yellow-500' :
                         'bg-gray-500'
                       }`}
-                      style={{ width: `${stock.squeezeScore}%` }}
+                      style={{ width: `${Math.min(stock.squeezeScore || 0, 100)}%` }}
                     />
                   </div>
-                  <span className="text-white text-sm font-bold">{stock.squeezeScore.toFixed(0)}</span>
+                  <span className="text-white text-sm font-bold">{(stock.squeezeScore || 0).toFixed(0)}</span>
                 </div>
               </div>
             </div>
@@ -656,53 +662,28 @@ function FullDashboard() {
     );
   };
 
-  // Component: Watchlist Tab
-  const WatchlistTab = ({ symbols, marketData }) => (
-    <div>
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-white">Watchlist</h2>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {symbols.map((symbol) => {
-          const data = marketData[symbol] || { price: 0, change: 0, changePercent: 0 };
-          return (
-            <div key={symbol} className="bg-gray-900 p-4 rounded-lg">
-              <h3 className="text-lg font-bold text-white mb-2">{symbol}</h3>
-              <p className="text-2xl font-bold text-white mb-1">{formatPrice(data.price)}</p>
-              <p className={`font-bold ${data.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {formatPercent(data.changePercent)}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-{/* Header */}
-<div className="bg-gray-900 border-b border-gray-800">
-  <div className="container mx-auto px-4 py-4">
-    <div className="flex justify-between items-center">
-      <div className="flex items-center gap-8">  {/* ADD THIS DIV */}
-        <h1 className="text-2xl font-bold bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent">
-          🚀 Market Dashboard Pro
-        </h1>
-        <MarketStatus />  {/* ADD THIS LINE */}
-      </div>  {/* CLOSE THE NEW DIV */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-gray-400 text-sm">Auto-refresh:</span>
-          <button
-            onClick={() => setAutoRefresh(!autoRefresh)}
-            className={`p-2 rounded-lg ${autoRefresh ? 'bg-green-500 bg-opacity-20 text-green-400' : 'bg-gray-800 text-gray-400'}`}
-          >
-            {autoRefresh ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-          </button>
-        </div>
-        {/* ... rest of the controls ... */}
+      {/* Header */}
+      <div className="bg-gray-900 border-b border-gray-800">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-8">
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent">
+                🚀 Market Dashboard Pro
+              </h1>
+              <MarketStatus />
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-gray-400 text-sm">Auto-refresh:</span>
+                <button
+                  onClick={() => setAutoRefresh(!autoRefresh)}
+                  className={`p-2 rounded-lg ${autoRefresh ? 'bg-green-500 bg-opacity-20 text-green-400' : 'bg-gray-800 text-gray-400'}`}
+                >
+                  {autoRefresh ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                </button>
+              </div>
               <select
                 value={refreshInterval}
                 onChange={(e) => setRefreshInterval(Number(e.target.value))}
@@ -722,22 +703,22 @@ function FullDashboard() {
       <div className="bg-gray-900 border-b border-gray-800 sticky top-0 z-10">
         <div className="container mx-auto px-4">
           <div className="flex gap-1 overflow-x-auto">
-{tabs.map((tab) => (
-  <button
-    key={tab.id}
-    onClick={() => setActiveTab(tab.id)}
-    className={`flex items-center gap-2 px-4 py-3 font-medium transition-colors whitespace-nowrap ${
-      activeTab === tab.id
-        ? 'text-white border-b-2 border-blue-500 bg-gray-800'
-        : 'text-gray-400 hover:text-white hover:bg-gray-800'
-    }`}
-  >
-    <span className="flex items-center gap-2">
-      {tab.icon}
-      <span>{tab.name}</span>
-    </span>
-  </button>
-))}
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-3 font-medium transition-colors whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? 'text-white border-b-2 border-blue-500 bg-gray-800'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  {tab.icon}
+                  <span>{tab.name}</span>
+                </span>
+              </button>
+            ))}
           </div>
         </div>
       </div>
