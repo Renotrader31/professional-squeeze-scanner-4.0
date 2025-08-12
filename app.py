@@ -323,14 +323,14 @@ with st.sidebar:
     polygon_key = st.text_input(
         "Polygon API Key (Optional)",
         type="password",
-        value=st.secrets.get("POLYGON_KEY", "") if "POLYGON_KEY" in st.secrets else "",
+        value="",
         help="Enter your Polygon.io API key"
     )
     
     uw_key = st.text_input(
         "Unusual Whales API Key (Optional)",
         type="password",
-        value=st.secrets.get("UW_KEY", "") if "UW_KEY" in st.secrets else "",
+        value="",
         help="Enter your Unusual Whales API key for better data"
     )
     
@@ -1008,7 +1008,7 @@ if not st.session_state.results.empty:
             - Better entry/exit points
             """)
     
-    with tab6:
+    with tab7:
         st.subheader("📉 P&L Calculator")
         
         # Select a specific trade
@@ -1108,6 +1108,207 @@ if not st.session_state.results.empty:
                     st.markdown(f"**Breakeven:** ${trade['breakeven']:.2f}")
     
     with tab5:
+        st.markdown('<h3 style="color: #ffffff;">🔥 Market Greeks & Flow Analysis</h3>', unsafe_allow_html=True)
+        
+        # Ticker selector for Greek analysis
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            greek_ticker = st.selectbox(
+                "Select Ticker for Greek Analysis:",
+                ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA", "AMD", "META"],
+                key="greek_ticker"
+            )
+            
+            if st.button("🔄 Load Greek Data", key="load_greeks"):
+                with st.spinner(f"Loading Greek data for {greek_ticker}..."):
+                    if st.session_state.scanner and st.session_state.scanner.uw_key:
+                        # Get Greek exposure data
+                        exposure_data = st.session_state.scanner.get_greek_exposure(greek_ticker)
+                        flow_data = st.session_state.scanner.get_greek_flow(greek_ticker)
+                        
+                        st.session_state['greek_exposure'] = exposure_data
+                        st.session_state['greek_flow'] = flow_data
+                        st.success("Greek data loaded!")
+                    else:
+                        st.warning("Please configure Unusual Whales API key")
+        
+        # Display Greek Heat Map
+        if 'greek_exposure' in st.session_state and st.session_state['greek_exposure']:
+            st.markdown("### 🗺️ Greek Exposure Heat Map")
+            
+            exposure = st.session_state['greek_exposure']
+            
+            # Create heat map data
+            strikes = []
+            call_deltas = []
+            put_deltas = []
+            call_gammas = []
+            put_gammas = []
+            
+            for item in exposure[:20]:  # Limit to 20 strikes for visibility
+                strike = float(item.get('strike', 0))
+                if strike:
+                    strikes.append(strike)
+                    call_deltas.append(float(item.get('call_delta', 0)))
+                    put_deltas.append(float(item.get('put_delta', 0)))
+                    call_gammas.append(float(item.get('call_gamma', 0)))
+                    put_gammas.append(float(item.get('put_gamma', 0)))
+            
+            if strikes:
+                # Create subplots for heat maps
+                fig = make_subplots(
+                    rows=2, cols=2,
+                    subplot_titles=('Call Delta Exposure', 'Put Delta Exposure', 
+                                   'Call Gamma Exposure', 'Put Gamma Exposure'),
+                    vertical_spacing=0.12,
+                    horizontal_spacing=0.1
+                )
+                
+                # Call Delta
+                fig.add_trace(
+                    go.Bar(x=strikes, y=call_deltas, 
+                          marker=dict(color=call_deltas, colorscale='RdYlGn'),
+                          name='Call Delta'),
+                    row=1, col=1
+                )
+                
+                # Put Delta
+                fig.add_trace(
+                    go.Bar(x=strikes, y=put_deltas,
+                          marker=dict(color=put_deltas, colorscale='RdYlGn_r'),
+                          name='Put Delta'),
+                    row=1, col=2
+                )
+                
+                # Call Gamma
+                fig.add_trace(
+                    go.Bar(x=strikes, y=call_gammas,
+                          marker=dict(color=call_gammas, colorscale='Viridis'),
+                          name='Call Gamma'),
+                    row=2, col=1
+                )
+                
+                # Put Gamma
+                fig.add_trace(
+                    go.Bar(x=strikes, y=put_gammas,
+                          marker=dict(color=put_gammas, colorscale='Viridis'),
+                          name='Put Gamma'),
+                    row=2, col=2
+                )
+                
+                fig.update_layout(
+                    height=600,
+                    showlegend=False,
+                    plot_bgcolor='#1a1a2e',
+                    paper_bgcolor='#1a1a2e',
+                    font=dict(color='#e0e0e0')
+                )
+                
+                fig.update_xaxes(title_text="Strike", gridcolor='#2a2a3e')
+                fig.update_yaxes(title_text="Exposure", gridcolor='#2a2a3e')
+                
+                st.plotly_chart(fig, use_container_width=True)
+        
+        # Display Greek Flow
+        if 'greek_flow' in st.session_state and st.session_state['greek_flow']:
+            st.markdown("### 📊 Directional Greek Flow")
+            
+            flow = st.session_state['greek_flow']
+            
+            if flow:
+                # Create metrics for latest flow
+                latest_flow = flow[0] if isinstance(flow, list) else flow
+                
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    total_delta = float(latest_flow.get('total_delta_flow', 0))
+                    st.metric(
+                        "Total Delta Flow",
+                        f"{total_delta:,.0f}",
+                        delta="Bullish" if total_delta > 0 else "Bearish"
+                    )
+                
+                with col2:
+                    total_vega = float(latest_flow.get('total_vega_flow', 0))
+                    st.metric(
+                        "Total Vega Flow",
+                        f"{total_vega:,.0f}",
+                        delta="Vol Long" if total_vega > 0 else "Vol Short"
+                    )
+                
+                with col3:
+                    dir_delta = float(latest_flow.get('dir_delta_flow', 0))
+                    st.metric(
+                        "Directional Delta",
+                        f"{dir_delta:,.0f}",
+                        delta="Smart Money" if abs(dir_delta) > 10000 else "Retail"
+                    )
+                
+                with col4:
+                    volume = int(latest_flow.get('volume', 0))
+                    st.metric(
+                        "Flow Volume",
+                        f"{volume:,}",
+                        delta=f"{latest_flow.get('transactions', 0)} trades"
+                    )
+                
+                # Flow Direction Gauge
+                st.markdown("### 🎯 Market Direction Indicator")
+                
+                # Calculate directional score (-100 to 100)
+                max_delta = 1000000  # Normalize factor
+                direction_score = min(100, max(-100, (total_delta / max_delta) * 100))
+                
+                # Create gauge chart
+                fig = go.Figure(go.Indicator(
+                    mode="gauge+number+delta",
+                    value=direction_score,
+                    title={'text': "Market Sentiment"},
+                    delta={'reference': 0},
+                    gauge={
+                        'axis': {'range': [-100, 100]},
+                        'bar': {'color': "#00ff88" if direction_score > 0 else "#ff6b6b"},
+                        'steps': [
+                            {'range': [-100, -50], 'color': '#ff0000'},
+                            {'range': [-50, -20], 'color': '#ff6b6b'},
+                            {'range': [-20, 20], 'color': '#ffff00'},
+                            {'range': [20, 50], 'color': '#90ee90'},
+                            {'range': [50, 100], 'color': '#00ff00'}
+                        ],
+                        'threshold': {
+                            'line': {'color': "white", 'width': 4},
+                            'thickness': 0.75,
+                            'value': direction_score
+                        }
+                    }
+                ))
+                
+                fig.update_layout(
+                    height=300,
+                    plot_bgcolor='#1a1a2e',
+                    paper_bgcolor='#1a1a2e',
+                    font=dict(color='#e0e0e0', size=16)
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Interpretation
+                if direction_score > 50:
+                    st.success("🚀 **STRONG BULLISH FLOW** - Smart money is aggressively buying calls")
+                elif direction_score > 20:
+                    st.info("📈 **BULLISH FLOW** - Moderate call buying detected")
+                elif direction_score > -20:
+                    st.warning("➡️ **NEUTRAL FLOW** - Mixed directional signals")
+                elif direction_score > -50:
+                    st.warning("📉 **BEARISH FLOW** - Moderate put buying detected")
+                else:
+                    st.error("🐻 **STRONG BEARISH FLOW** - Smart money is aggressively buying puts")
+        
+        else:
+            st.info("👆 Select a ticker and click 'Load Greek Data' to see heat maps and flow analysis")
+    
+    with tab6:
         st.subheader("📋 All Results")
         
         # Filters
