@@ -1008,7 +1008,7 @@ if not st.session_state.results.empty:
             - Better entry/exit points
             """)
     
-    with tab7:
+    with tab6:
         st.subheader("📉 P&L Calculator")
         
         # Select a specific trade
