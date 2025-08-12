@@ -1243,7 +1243,7 @@ class OptionsScanner:
             filtered = filtered[filtered['ticker'].isin(tickers)]
             
         return filtered
-def get_greek_exposure(self, ticker: str) -> Dict:
+    def get_greek_exposure(self, ticker: str) -> Dict:
         """Get Greek exposure data for heat maps"""
         if not self.uw_key:
             return {}
