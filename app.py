@@ -323,14 +323,14 @@ with st.sidebar:
     polygon_key = st.text_input(
         "Polygon API Key (Optional)",
         type="password",
-        value="",
+        value=st.secrets.get("POLYGON_KEY", "") if "POLYGON_KEY" in st.secrets else "",
         help="Enter your Polygon.io API key"
     )
     
     uw_key = st.text_input(
         "Unusual Whales API Key (Optional)",
         type="password",
-        value="",
+        value=st.secrets.get("UW_KEY", "") if "UW_KEY" in st.secrets else "",
         help="Enter your Unusual Whales API key for better data"
     )
     
