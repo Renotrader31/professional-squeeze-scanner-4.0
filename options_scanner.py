@@ -1243,7 +1243,49 @@ class OptionsScanner:
             filtered = filtered[filtered['ticker'].isin(tickers)]
             
         return filtered
-
+def get_greek_exposure(self, ticker: str) -> Dict:
+        """Get Greek exposure data for heat maps"""
+        if not self.uw_key:
+            return {}
+            
+        try:
+            headers = {
+                "Accept": "application/json",
+                "Authorization": f"Bearer {self.uw_key}"
+            }
+            
+            url = f"https://api.unusualwhales.com/api/stock/{ticker}/greek-exposure/strike"
+            response = requests.get(url, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('data', [])
+        except Exception as e:
+            print(f"Greek exposure error: {str(e)[:100]}")
+            
+        return []
+    
+    def get_greek_flow(self, ticker: str) -> List[Dict]:
+        """Get Greek flow data for directional analysis"""
+        if not self.uw_key:
+            return []
+            
+        try:
+            headers = {
+                "Accept": "application/json",
+                "Authorization": f"Bearer {self.uw_key}"
+            }
+            
+            url = f"https://api.unusualwhales.com/api/stock/{ticker}/greek-flow"
+            response = requests.get(url, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('data', [])
+        except Exception as e:
+            print(f"Greek flow error: {str(e)[:100]}")
+            
+        return []
 
 def main():
     """Main execution function"""
@@ -1253,8 +1295,8 @@ def main():
     # ==========================================
     
     # Your API Keys
-    POLYGON_API_KEY = "YOUR_POLYGON_API_KEY_HERE"  # Replace with your key
-    UNUSUAL_WHALES_KEY = None  # Optional: Add if you have it
+    POLYGON_API_KEY = "75rlu6cWGNnIqqR_x8M384YUjBgGk6kT"  # Replace with your key
+    UNUSUAL_WHALES_KEY = "29a464c8-9da0-490a-ac24-0d4aa492dcbd"
     
     # Tickers to scan
     TICKERS = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "TSLA", "META", "SPY", "QQQ"]
