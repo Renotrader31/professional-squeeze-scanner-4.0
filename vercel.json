@@ -21,9 +21,5 @@
       "dest": "api/index.py"
     }
   ],
-  "env": {
-    "POLYGON_API_KEY": "@polygon_api_key",
-    "UNUSUAL_WHALES_API_KEY": "@unusual_whales_api_key",
-    "ORTEX_API_KEY": "@ortex_api_key"
-  }
+
 }

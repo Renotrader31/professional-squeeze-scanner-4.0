@@ -11,6 +11,10 @@ import sys
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
+
 try:
     from options_scanner import OptionsScanner
     from squeeze_analyzer import SqueezeAnalyzer
@@ -39,9 +43,9 @@ def scan_options():
     try:
         data = request.get_json()
         
-        # Extract parameters
-        polygon_key = data.get('polygon_key', '')
-        uw_key = data.get('uw_key', '')
+        # Extract parameters with environment variable fallbacks
+        polygon_key = data.get('polygon_key', '') or os.getenv('POLYGON_API_KEY', '')
+        uw_key = data.get('uw_key', '') or os.getenv('UNUSUAL_WHALES_API_KEY', '')
         tickers = data.get('tickers', ['AAPL', 'MSFT', 'NVDA'])
         days_to_exp = data.get('days_to_exp', 30)
         min_return = data.get('min_return', 20)
@@ -129,10 +133,10 @@ def squeeze_scan():
     try:
         data = request.get_json()
         
-        # Extract parameters
-        ortex_key = data.get('ortex_key', '')
-        polygon_key = data.get('polygon_key', '')
-        uw_key = data.get('uw_key', '')
+        # Extract parameters with environment variable fallbacks
+        ortex_key = data.get('ortex_key', '') or os.getenv('ORTEX_API_KEY', '')
+        polygon_key = data.get('polygon_key', '') or os.getenv('POLYGON_API_KEY', '')
+        uw_key = data.get('uw_key', '') or os.getenv('UNUSUAL_WHALES_API_KEY', '')
         tickers = data.get('tickers', ['GME', 'AMC', 'BBBY', 'ATER'])
         min_score = data.get('min_score', 20)
         
