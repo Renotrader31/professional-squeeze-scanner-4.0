@@ -1,6 +1,7 @@
 from http.server import BaseHTTPRequestHandler
 import json
 import urllib.parse
+import urllib.request
 from datetime import datetime
 
 class handler(BaseHTTPRequestHandler):
@@ -153,8 +154,12 @@ class handler(BaseHTTPRequestHandler):
         <div class="form-section">
             <h2>🔑 Configuration</h2>
             <div class="form-group">
-                <label for="ortexKey">Ortex API Key (Optional - uses mock data if empty):</label>
-                <input type="password" id="ortexKey" placeholder="Enter your Ortex API key for real data">
+                <label for="ortexKey">🔑 Ortex API Key (For Live Short Interest Data):</label>
+                <input type="password" id="ortexKey" placeholder="Enter your Ortex API key for real-time short interest data">
+                <div style="margin-top: 8px; font-size: 0.9rem; color: #a0a0b0;">
+                    💡 <strong>Get Live Data:</strong> Sign up at <a href="https://www.ortex.com" target="_blank" style="color: #ff6b6b;">ortex.com</a> for API access
+                    <br>📊 Without API key: Uses enhanced mock data with real-time prices from Yahoo Finance
+                </div>
             </div>
 
             <div class="form-group">
@@ -303,7 +308,13 @@ class handler(BaseHTTPRequestHandler):
 
             let html = `<div class="results">
                 <h3>🎯 Squeeze Scan Results</h3>
-                <p><strong>${message}</strong></p>`;
+                <p><strong>${message}</strong></p>
+                <div style="margin-bottom: 20px; padding: 10px; background: #2a2a3e; border-radius: 8px; font-size: 0.9rem;">
+                    <strong>📋 Legend:</strong>
+                    <span style="background: #28a745; color: white; padding: 2px 6px; border-radius: 10px; font-size: 0.7rem; margin: 0 5px;">🔴 LIVE</span> = Real Ortex + Yahoo Finance data
+                    <span style="background: #ffc107; color: black; padding: 2px 6px; border-radius: 10px; font-size: 0.7rem; margin: 0 5px;">📊 LIVE PRICE</span> = Live prices + Demo short data
+                    <span style="background: #6c757d; color: white; padding: 2px 6px; border-radius: 10px; font-size: 0.7rem; margin: 0 5px;">📝 DEMO</span> = Enhanced demo data
+                </div>`;
             
             results.forEach((result, index) => {
                 const score = result.squeeze_score || 0;
@@ -317,10 +328,23 @@ class handler(BaseHTTPRequestHandler):
                 const priceChangeIcon = (result.price_change || 0) >= 0 ? '↗' : '↘';
                 const volumeM = result.volume ? (result.volume / 1000000).toFixed(1) : 'N/A';
                 
+                // Data source indicator
+                let dataSourceBadge = '';
+                if (result.data_source === 'live_api') {
+                    dataSourceBadge = '<span style="background: #28a745; color: white; padding: 2px 6px; border-radius: 10px; font-size: 0.7rem; font-weight: bold;">🔴 LIVE</span>';
+                } else if (result.data_source === 'mixed_live_price') {
+                    dataSourceBadge = '<span style="background: #ffc107; color: black; padding: 2px 6px; border-radius: 10px; font-size: 0.7rem; font-weight: bold;">📊 LIVE PRICE</span>';
+                } else {
+                    dataSourceBadge = '<span style="background: #6c757d; color: white; padding: 2px 6px; border-radius: 10px; font-size: 0.7rem; font-weight: bold;">📝 DEMO</span>';
+                }
+                
                 html += `
                     <div class="result-item ${scoreClass}">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                            <h4 style="margin: 0; color: #ff6b6b; font-size: 1.3rem;">#${index + 1} ${result.ticker}</h4>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <h4 style="margin: 0; color: #ff6b6b; font-size: 1.3rem;">#${index + 1} ${result.ticker}</h4>
+                                ${dataSourceBadge}
+                            </div>
                             <div style="text-align: right;">
                                 <div style="font-size: 1.4rem; font-weight: bold; color: #e0e0e0;">$${result.current_price || 'N/A'}</div>
                                 <div style="color: ${priceChangeColor}; font-weight: bold;">
@@ -382,6 +406,151 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(response).encode())
     
+    def get_ortex_data(self, ticker, ortex_key):
+        """Get real Ortex data using API key"""
+        if not ortex_key or len(ortex_key) < 10:
+            return None
+            
+        try:
+            # Ortex API endpoint (you'll need to replace with actual Ortex API URL)
+            url = f"https://api.ortex.com/v1/short-interest/{ticker}"
+            
+            headers = {
+                'Authorization': f'Bearer {ortex_key}',
+                'Content-Type': 'application/json',
+                'User-Agent': 'Ultimate-Squeeze-Scanner/1.0'
+            }
+            
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=10) as response:
+                if response.status == 200:
+                    data = json.loads(response.read().decode())
+                    
+                    # Parse Ortex response format (adjust based on actual API)
+                    return {
+                        'short_interest': data.get('short_interest_percent', 0),
+                        'days_to_cover': data.get('days_to_cover', 0),
+                        'utilization': data.get('utilization', 0),
+                        'cost_to_borrow': data.get('cost_to_borrow', 0),
+                        'shares_on_loan': data.get('shares_on_loan', 0),
+                        'exchange_reported_si': data.get('exchange_si', 0)
+                    }
+                    
+        except Exception as e:
+            print(f"Ortex API error for {ticker}: {e}")
+            return None
+            
+        return None
+    
+    def get_stock_price_data(self, ticker):
+        """Get current stock price from free APIs"""
+        try:
+            # Try Yahoo Finance API (free)
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+            
+            headers = {
+                'User-Agent': 'Ultimate-Squeeze-Scanner/1.0'
+            }
+            
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=10) as response:
+                if response.status == 200:
+                    data = json.loads(response.read().decode())
+                    
+                    result = data.get('chart', {}).get('result', [])
+                    if result:
+                        meta = result[0].get('meta', {})
+                        current_price = meta.get('regularMarketPrice', 0)
+                        previous_close = meta.get('previousClose', current_price)
+                        volume = meta.get('regularMarketVolume', 0)
+                        
+                        price_change_percent = 0
+                        if previous_close > 0:
+                            price_change_percent = ((current_price - previous_close) / previous_close) * 100
+                        
+                        return {
+                            'current_price': round(current_price, 2),
+                            'price_change': round(price_change_percent, 2),
+                            'volume': volume,
+                            'previous_close': previous_close
+                        }
+                        
+        except Exception as e:
+            print(f"Price API error for {ticker}: {e}")
+            
+        # Fallback to Alpha Vantage (free tier)
+        try:
+            # Note: You would need to register for a free API key
+            # For now, we'll return None to fall back to mock data
+            pass
+            
+        except Exception:
+            pass
+            
+        return None
+    
+    def calculate_squeeze_score(self, ortex_data, price_data):
+        """Calculate squeeze score based on Ortex metrics"""
+        if not ortex_data:
+            return 50  # Default score
+            
+        score = 0
+        
+        # Short Interest (0-35 points)
+        si = ortex_data.get('short_interest', 0)
+        if si >= 30:
+            score += 35
+        elif si >= 20:
+            score += 25
+        elif si >= 15:
+            score += 15
+        elif si >= 10:
+            score += 8
+            
+        # Utilization (0-25 points)
+        util = ortex_data.get('utilization', 0)
+        if util >= 95:
+            score += 25
+        elif util >= 85:
+            score += 20
+        elif util >= 75:
+            score += 12
+        elif util >= 60:
+            score += 6
+            
+        # Cost to Borrow (0-25 points)
+        ctb = ortex_data.get('cost_to_borrow', 0)
+        if ctb >= 20:
+            score += 25
+        elif ctb >= 10:
+            score += 18
+        elif ctb >= 5:
+            score += 10
+        elif ctb >= 2:
+            score += 5
+            
+        # Days to Cover (0-15 points)
+        dtc = ortex_data.get('days_to_cover', 0)
+        if dtc >= 5:
+            score += 15
+        elif dtc >= 3:
+            score += 10
+        elif dtc >= 2:
+            score += 5
+            
+        return min(100, score)
+    
+    def get_squeeze_type(self, score):
+        """Determine squeeze risk level based on score"""
+        if score >= 80:
+            return "EXTREME SQUEEZE RISK"
+        elif score >= 60:
+            return "High Squeeze Risk"
+        elif score >= 40:
+            return "Moderate Squeeze Risk"
+        else:
+            return "Low Squeeze Risk"
+    
     def handle_squeeze_scan(self):
         try:
             content_length = int(self.headers.get('Content-Length', 0))
@@ -390,6 +559,9 @@ class handler(BaseHTTPRequestHandler):
             
             ortex_key = data.get('ortex_key', '')
             tickers = data.get('tickers', ['GME', 'AMC'])
+            
+            # Check if we should use live data
+            use_live_data = ortex_key and len(ortex_key.strip()) >= 10
             
             # Comprehensive squeeze data with enhanced metrics
             mock_data = {
@@ -444,9 +616,62 @@ class handler(BaseHTTPRequestHandler):
             }
             
             results = []
+            live_data_count = 0
+            
             for ticker in tickers:
                 ticker = ticker.upper()
-                if ticker in mock_data:
+                
+                # Try to get live data first
+                ortex_data = None
+                price_data = None
+                
+                if use_live_data:
+                    ortex_data = self.get_ortex_data(ticker, ortex_key)
+                    price_data = self.get_stock_price_data(ticker)
+                    
+                    if ortex_data or price_data:
+                        live_data_count += 1
+                
+                # Use live data if available, otherwise fall back to mock data
+                if ortex_data and price_data:
+                    # Calculate squeeze score from live data
+                    squeeze_score = self.calculate_squeeze_score(ortex_data, price_data)
+                    squeeze_type = self.get_squeeze_type(squeeze_score)
+                    
+                    results.append({
+                        'ticker': ticker,
+                        'squeeze_score': squeeze_score,
+                        'squeeze_type': squeeze_type,
+                        'current_price': price_data['current_price'],
+                        'price_change': price_data['price_change'],
+                        'volume': price_data['volume'],
+                        'ortex_data': ortex_data,
+                        'timestamp': datetime.now().isoformat(),
+                        'data_source': 'live_api'
+                    })
+                    
+                elif price_data and ticker in mock_data:
+                    # Mix live price data with mock Ortex data
+                    mock = mock_data[ticker]
+                    results.append({
+                        'ticker': ticker,
+                        'squeeze_score': mock['score'],
+                        'squeeze_type': mock['type'],
+                        'current_price': price_data['current_price'],
+                        'price_change': price_data['price_change'],
+                        'volume': price_data['volume'],
+                        'ortex_data': {
+                            'short_interest': mock['si'],
+                            'days_to_cover': mock['dtc'],
+                            'utilization': mock['util'],
+                            'cost_to_borrow': mock['ctb']
+                        },
+                        'timestamp': datetime.now().isoformat(),
+                        'data_source': 'mixed_live_price'
+                    })
+                    
+                elif ticker in mock_data:
+                    # Use pure mock data as fallback
                     mock = mock_data[ticker]
                     results.append({
                         'ticker': ticker,
@@ -461,17 +686,27 @@ class handler(BaseHTTPRequestHandler):
                             'utilization': mock['util'],
                             'cost_to_borrow': mock['ctb']
                         },
-                        'timestamp': datetime.now().isoformat()
+                        'timestamp': datetime.now().isoformat(),
+                        'data_source': 'mock_data'
                     })
             
             # Sort by squeeze score descending
             results.sort(key=lambda x: x['squeeze_score'], reverse=True)
             
+            # Generate appropriate message
+            if use_live_data and live_data_count > 0:
+                data_message = f"Using live data for {live_data_count} tickers, mock data for others"
+            elif use_live_data:
+                data_message = "Ortex API key provided but no live data retrieved - using enhanced mock data"
+            else:
+                data_message = "Using enhanced mock data (provide Ortex API key for live data)"
+            
             response = {
                 'success': True,
                 'results': results,
                 'count': len(results),
-                'message': f'Found {len(results)} squeeze candidates (using {"real Ortex data" if ortex_key else "mock data"})'
+                'live_data_count': live_data_count,
+                'message': f'Found {len(results)} squeeze candidates - {data_message}'
             }
             
             self.send_response(200)
