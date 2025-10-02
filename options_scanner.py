@@ -1359,6 +1359,52 @@ def main():
         print("\n⚠️  No opportunities found with current criteria")
         print("Try adjusting MIN_RETURN or expanding ticker list")
 
+    def get_greek_exposure(self, ticker: str):
+        """Get Greek exposure data from Unusual Whales"""
+        if not self.uw_key:
+            return []
+            
+        try:
+            headers = {
+                "Accept": "application/json",
+                "Authorization": f"Bearer {self.uw_key}"
+            }
+            
+            url = f"https://api.unusualwhales.com/api/stock/{ticker}/greeks/exposure"
+            response = requests.get(url, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('data', [])
+                
+        except Exception as e:
+            print(f"Error getting Greek exposure: {str(e)[:100]}")
+            
+        return []
+    
+    def get_greek_flow(self, ticker: str):
+        """Get Greek flow data from Unusual Whales"""
+        if not self.uw_key:
+            return []
+            
+        try:
+            headers = {
+                "Accept": "application/json",
+                "Authorization": f"Bearer {self.uw_key}"
+            }
+            
+            url = f"https://api.unusualwhales.com/api/stock/{ticker}/greeks/flow"
+            response = requests.get(url, headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                return data.get('data', [])
+                
+        except Exception as e:
+            print(f"Error getting Greek flow: {str(e)[:100]}")
+            
+        return []
+
 
 if __name__ == "__main__":
     main()
