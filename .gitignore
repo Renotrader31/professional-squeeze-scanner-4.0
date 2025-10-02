@@ -1,5 +1,7 @@
-*.pyc
-__pycache__/
+node_modules/
+package-lock.json
+.vercel/
+*.log
 .DS_Store
-test_*.py
-*.csv
+.env
+.env.local

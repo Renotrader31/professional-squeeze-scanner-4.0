@@ -396,9 +396,9 @@ class handler(BaseHTTPRequestHandler):
     def send_health(self):
         response = {
             'status': 'healthy',
-            'message': 'Ultimate Squeeze Scanner API is running perfectly!',
+            'message': 'Ultimate Squeeze Scanner API with Live Ortex + Yahoo Finance Integration!',
             'timestamp': datetime.now().isoformat(),
-            'version': '1.0.0'
+            'version': '2.0.0-live-api'
         }
         
         self.send_response(200)
