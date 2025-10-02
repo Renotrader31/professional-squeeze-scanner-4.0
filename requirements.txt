@@ -5,3 +5,9 @@ plotly
 polygon-api-client
 requests
 matplotlib
+flask
+flask-core
+gunicorn
+scipy
+python-dotenv
+
