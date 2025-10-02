@@ -1,24 +1,20 @@
+# Replace with a modern Next.js compatible vercel.json
+cat > vercel.json << 'EOF'
 {
   "version": 2,
-  "name": "ultimate-squeeze-scanner",
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/next"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
-    }
-  ],
+  "framework": "nextjs",
   "functions": {
     "pages/api/scan-single.js": {
       "maxDuration": 30
     },
     "pages/api/scan-bulk.js": {
       "maxDuration": 300
+    },
+    "pages/api/scan-bulk-smart.js": {
+      "maxDuration": 300
+    },
+    "pages/api/scan-bulk-demo-simple.js": {
+      "maxDuration": 60
     },
     "pages/api/stream.js": {
       "maxDuration": 300
@@ -64,3 +60,4 @@
     }
   ]
 }
+EOF
