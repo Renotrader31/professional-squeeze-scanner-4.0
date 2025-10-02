@@ -26,6 +26,7 @@ class OptionsScanner {
         const tickerList = document.getElementById('tickerList');
         
         const presets = {
+            'squeeze_targets': 'GME, AMC, BBBY, ATER, SPRT, IRNT, OPAD, MRIN, BGFV, PROG',
             'mega_tech': 'AAPL, MSFT, NVDA, GOOGL, AMZN, META, TSLA',
             'etfs': 'SPY, QQQ, IWM, DIA, XLF, XLE, GLD',
             'meme': 'GME, AMC, BBBY, BB, NOK',
@@ -104,11 +105,160 @@ class OptionsScanner {
         return {
             polygon_key: document.getElementById('polygonKey').value.trim(),
             uw_key: document.getElementById('uwKey').value.trim(),
+            ortex_key: document.getElementById('ortexKey').value.trim(),
             tickers: tickers,
             days_to_exp: parseInt(document.getElementById('daysToExp').value),
             min_return: parseInt(document.getElementById('minReturn').value),
             strategies: ['Long Calls', 'Long Puts', 'Bull Call Spreads', 'Bear Put Spreads', 'Cash-Secured Puts']
         };
+    }
+
+    async runSqueezeScan() {
+        if (this.isScanning) {
+            this.showAlert('Scan already in progress', 'warning');
+            return;
+        }
+
+        this.isScanning = true;
+        this.showLoading(true);
+        this.hideAllSections();
+        this.updateScanStatus('🔥 Scanning for Squeezes...', 'danger');
+
+        try {
+            const scanData = this.gatherScanData();
+            
+            // Validate Ortex key for squeeze scanning
+            if (!scanData.ortex_key && !scanData.uw_key) {
+                this.showAlert('Ortex or Unusual Whales API key required for squeeze scanning', 'warning');
+                this.updateScanStatus('Missing API key', 'warning');
+                return;
+            }
+
+            if (!scanData.tickers || scanData.tickers.length === 0) {
+                this.showAlert('Please enter at least one ticker symbol', 'warning');
+                this.updateScanStatus('Missing tickers', 'warning');
+                return;
+            }
+
+            // Make squeeze scan API call
+            const response = await fetch('/api/squeeze/scan', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    ortex_key: scanData.ortex_key,
+                    polygon_key: scanData.polygon_key,
+                    uw_key: scanData.uw_key,
+                    tickers: scanData.tickers,
+                    min_score: 20
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                this.results = result.results;
+                this.displaySqueezeResults();
+                this.updateScanStatus(`🚨 Found ${result.count} squeeze candidates!`, 'danger');
+            } else {
+                this.showAlert(`Squeeze scan failed: ${result.error || result.message}`, 'danger');
+                this.updateScanStatus('Squeeze scan failed', 'danger');
+            }
+
+        } catch (error) {
+            console.error('Squeeze scan error:', error);
+            this.showAlert(`Network error: ${error.message}`, 'danger');
+            this.updateScanStatus('Error', 'danger');
+        } finally {
+            this.isScanning = false;
+            this.showLoading(false);
+        }
+    }
+
+    displaySqueezeResults() {
+        if (!this.results || this.results.length === 0) {
+            this.showNoResults();
+            return;
+        }
+
+        this.updateSqueezeResultsSummary();
+        this.populateSqueezeResultsTable();
+        this.createSqueezeCharts();
+        this.showResultsSection();
+    }
+
+    updateSqueezeResultsSummary() {
+        const results = this.results;
+        
+        // Calculate squeeze metrics
+        const totalCandidates = results.length;
+        const scores = results.map(r => parseFloat(r.squeeze_score) || 0);
+        const bestScore = Math.max(...scores);
+        const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+        
+        // Count extreme risks
+        const extremeRisks = results.filter(r => parseFloat(r.squeeze_score) >= 80).length;
+        const highRisks = results.filter(r => parseFloat(r.squeeze_score) >= 60).length;
+
+        // Get top candidate
+        const topCandidate = results[0]?.ticker || 'N/A';
+
+        // Update DOM
+        document.getElementById('totalOps').textContent = totalCandidates.toLocaleString();
+        document.getElementById('bestReturn').textContent = `${bestScore.toFixed(0)}`;
+        document.getElementById('avgReturn').textContent = `${avgScore.toFixed(0)}`;
+        document.getElementById('topStrategy').textContent = extremeRisks > 0 ? `${extremeRisks} EXTREME` : `${highRisks} HIGH RISK`;
+        document.getElementById('avgDTE').textContent = topCandidate;
+
+        document.getElementById('resultsSummary').classList.remove('d-none');
+        document.getElementById('resultsSummary').classList.add('fade-in');
+    }
+
+    populateSqueezeResultsTable() {
+        const tbody = document.getElementById('resultsBody');
+        tbody.innerHTML = '';
+
+        // Update table headers for squeeze data
+        const thead = document.querySelector('#resultsTable thead tr');
+        thead.innerHTML = `
+            <th>Ticker</th>
+            <th>Squeeze Score</th>
+            <th>Risk Level</th>
+            <th>Short Interest %</th>
+            <th>Days to Cover</th>
+            <th>Utilization %</th>
+            <th>Cost to Borrow</th>
+            <th>Gamma Exposure</th>
+            <th>Alert Level</th>
+        `;
+
+        this.results.forEach(result => {
+            const row = document.createElement('tr');
+            
+            const scoreClass = this.getSqueezeScoreClass(parseFloat(result.squeeze_score) || 0);
+            const riskClass = this.getRiskLevelClass(result.squeeze_type);
+            
+            const ortexData = result.ortex_data || {};
+            const gammaData = result.gamma_data || {};
+            
+            row.innerHTML = `
+                <td><strong>${result.ticker}</strong></td>
+                <td class="${scoreClass}">${result.squeeze_score?.toFixed(0) || 0}</td>
+                <td class="${riskClass}">${result.squeeze_type}</td>
+                <td>${this.formatPercentage(ortexData.short_interest)}</td>
+                <td>${ortexData.days_to_cover?.toFixed(1) || '-'}</td>
+                <td>${this.formatPercentage(ortexData.utilization)}</td>
+                <td>${this.formatPercentage(ortexData.cost_to_borrow)}</td>
+                <td>${this.formatNumber(gammaData.net_gamma)}</td>
+                <td class="${this.getAlertClass(result.squeeze_score)}">${this.getAlertLevel(result.squeeze_score)}</td>
+            `;
+
+            tbody.appendChild(row);
+        });
+
+        document.getElementById('resultsTable').classList.remove('d-none');
+        document.getElementById('resultsTable').classList.add('fade-in');
     }
 
     validateInputs(data) {
@@ -328,6 +478,138 @@ class OptionsScanner {
         }
     }
 
+    formatNumber(value) {
+        if (!value || value === '' || isNaN(value)) return '-';
+        return parseFloat(value).toLocaleString();
+    }
+
+    getSqueezeScoreClass(score) {
+        if (score >= 80) return 'text-danger fw-bold';
+        if (score >= 60) return 'text-warning fw-bold';
+        if (score >= 40) return 'text-info';
+        return 'text-light';
+    }
+
+    getRiskLevelClass(riskLevel) {
+        if (riskLevel?.includes('EXTREME')) return 'text-danger fw-bold';
+        if (riskLevel?.includes('High')) return 'text-warning';
+        if (riskLevel?.includes('Moderate')) return 'text-info';
+        return 'text-muted';
+    }
+
+    getAlertClass(score) {
+        if (score >= 80) return 'badge bg-danger';
+        if (score >= 60) return 'badge bg-warning';
+        if (score >= 40) return 'badge bg-info';
+        return 'badge bg-secondary';
+    }
+
+    getAlertLevel(score) {
+        if (score >= 80) return 'CRITICAL';
+        if (score >= 60) return 'HIGH';
+        if (score >= 40) return 'MEDIUM';
+        return 'LOW';
+    }
+
+    createSqueezeCharts() {
+        this.createSqueezeScoreChart();
+        this.createRiskDistributionChart();
+        document.getElementById('chartsSection').classList.remove('d-none');
+        document.getElementById('chartsSection').classList.add('fade-in');
+    }
+
+    createSqueezeScoreChart() {
+        const scores = this.results.map(r => parseFloat(r.squeeze_score) || 0);
+        const tickers = this.results.map(r => r.ticker);
+        
+        const trace = {
+            x: tickers,
+            y: scores,
+            type: 'bar',
+            marker: {
+                color: scores.map(score => {
+                    if (score >= 80) return '#dc3545';
+                    if (score >= 60) return '#ffc107'; 
+                    if (score >= 40) return '#0dcaf0';
+                    return '#6c757d';
+                }),
+                line: { color: '#2a2a3e', width: 1 }
+            },
+            hovertemplate: '%{x}<br>Squeeze Score: %{y:.0f}<extra></extra>'
+        };
+
+        const layout = {
+            title: {
+                text: '🔥 Squeeze Risk Scores',
+                font: { color: '#ff6b6b', size: 16 }
+            },
+            xaxis: { 
+                title: 'Ticker',
+                gridcolor: '#2a2a3e',
+                color: '#e0e0e0'
+            },
+            yaxis: { 
+                title: 'Squeeze Score',
+                gridcolor: '#2a2a3e',
+                color: '#e0e0e0',
+                range: [0, 100]
+            },
+            plot_bgcolor: '#1a1a2e',
+            paper_bgcolor: '#1a1a2e',
+            font: { color: '#e0e0e0' },
+            height: 300,
+            margin: { t: 50, b: 50, l: 50, r: 50 }
+        };
+
+        Plotly.newPlot('returnChart', [trace], layout, { displayModeBar: false });
+    }
+
+    createRiskDistributionChart() {
+        const riskCounts = {};
+        this.results.forEach(r => {
+            const risk = r.squeeze_type;
+            riskCounts[risk] = (riskCounts[risk] || 0) + 1;
+        });
+
+        const risks = Object.keys(riskCounts);
+        const counts = Object.values(riskCounts);
+
+        const trace = {
+            labels: risks,
+            values: counts,
+            type: 'pie',
+            hole: 0.6,
+            marker: {
+                colors: ['#dc3545', '#ffc107', '#0dcaf0', '#6c757d'],
+                line: { color: '#1a1a2e', width: 2 }
+            },
+            textposition: 'outside',
+            textinfo: 'label+percent',
+            hovertemplate: '%{label}<br>Count: %{value}<br>%{percent}<extra></extra>'
+        };
+
+        const layout = {
+            title: {
+                text: '⚠️ Risk Level Distribution',
+                font: { color: '#ff6b6b', size: 16 }
+            },
+            plot_bgcolor: '#1a1a2e',
+            paper_bgcolor: '#1a1a2e',
+            font: { color: '#e0e0e0' },
+            height: 300,
+            showlegend: false,
+            margin: { t: 50, b: 50, l: 50, r: 50 },
+            annotations: [{
+                text: `${risks.length}<br>Risk Levels`,
+                x: 0.5, y: 0.5,
+                font: { size: 16, color: '#ff6b6b' },
+                showarrow: false
+            }]
+        };
+
+        Plotly.newPlot('strategyChart', [trace], layout, { displayModeBar: false });
+    }
+
     showLoading(show) {
         const loading = document.getElementById('loading');
         if (show) {
@@ -389,6 +671,10 @@ function updateReturn() {
 
 function runScan() {
     scanner.runScan();
+}
+
+function runSqueezeScan() {
+    scanner.runSqueezeScan();
 }
 
 // Initialize the scanner when DOM is loaded
