@@ -148,7 +148,7 @@ class handler(BaseHTTPRequestHandler):
     <div class="container">
         <div class="header">
             <h1>🔥 ULTIMATE SQUEEZE SCANNER</h1>
-            <p>Professional short squeeze detection with live Ortex API integration</p>
+            <p>Professional short squeeze detection with live Ortex API + Yahoo Finance integration</p>
         </div>
 
         <div class="form-section">
