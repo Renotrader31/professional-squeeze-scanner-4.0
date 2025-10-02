@@ -6,7 +6,8 @@
       "use": "@vercel/python",
       "config": {
         "maxLambdaSize": "50mb",
-        "runtime": "python3.9"
+        "runtime": "python3.9",
+        "maxDuration": 30
       }
     }
   ],
@@ -22,11 +23,7 @@
   ],
   "env": {
     "POLYGON_API_KEY": "@polygon_api_key",
-    "UNUSUAL_WHALES_API_KEY": "@unusual_whales_api_key"
-  },
-  "functions": {
-    "api/index.py": {
-      "maxDuration": 30
-    }
+    "UNUSUAL_WHALES_API_KEY": "@unusual_whales_api_key",
+    "ORTEX_API_KEY": "@ortex_api_key"
   }
 }
