@@ -69,24 +69,12 @@ def scan_options():
             min_return=min_return
         )
         
-        # Convert DataFrame to JSON-serializable format
-        if not results.empty:
-            # Handle NaN values and convert to dict
-            results_dict = results.fillna('').to_dict('records')
-            
-            # Convert any numpy types to Python types
-            for record in results_dict:
-                for key, value in record.items():
-                    if hasattr(value, 'item'):  # numpy scalar
-                        record[key] = value.item()
-                    elif str(type(value)).startswith('<class \'numpy'):
-                        record[key] = float(value) if 'float' in str(type(value)) else int(value)
-            
+        if results:
             return jsonify({
                 'success': True,
-                'results': results_dict,
-                'count': len(results_dict),
-                'message': f'Found {len(results_dict)} opportunities'
+                'results': results,
+                'count': len(results),
+                'message': f'Found {len(results)} opportunities'
             })
         else:
             return jsonify({
@@ -151,23 +139,12 @@ def squeeze_scan():
         # Run squeeze scan
         results = squeeze_analyzer_instance.scan_squeeze_candidates(tickers)
         
-        if not results.empty:
-            # Convert DataFrame to JSON-serializable format
-            results_dict = results.fillna('').to_dict('records')
-            
-            # Convert numpy types to Python types
-            for record in results_dict:
-                for key, value in record.items():
-                    if hasattr(value, 'item'):
-                        record[key] = value.item()
-                    elif str(type(value)).startswith('<class \'numpy'):
-                        record[key] = float(value) if 'float' in str(type(value)) else int(value)
-            
+        if results:
             return jsonify({
                 'success': True,
-                'results': results_dict,
-                'count': len(results_dict),
-                'message': f'Found {len(results_dict)} squeeze candidates'
+                'results': results,
+                'count': len(results),
+                'message': f'Found {len(results)} squeeze candidates'
             })
         else:
             return jsonify({

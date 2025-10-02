@@ -4,8 +4,7 @@ Detects gamma squeezes, short squeezes, and options flow anomalies
 """
 
 import requests
-import pandas as pd
-import numpy as np
+import json
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 
@@ -232,7 +231,7 @@ class SqueezeAnalyzer:
             'timestamp': datetime.now().isoformat()
         }
     
-    def scan_squeeze_candidates(self, tickers: List[str]) -> pd.DataFrame:
+    def scan_squeeze_candidates(self, tickers: List[str]) -> List[Dict]:
         """Scan multiple tickers for squeeze potential"""
         
         results = []
@@ -253,12 +252,11 @@ class SqueezeAnalyzer:
                 continue
         
         if results:
-            # Convert to DataFrame and sort by squeeze score
-            df = pd.DataFrame(results)
-            df = df.sort_values('squeeze_score', ascending=False)
-            return df
+            # Sort by squeeze score
+            results.sort(key=lambda x: x['squeeze_score'], reverse=True)
+            return results
         else:
-            return pd.DataFrame()
+            return []
     
     def get_squeeze_alerts(self, min_score: float = 60) -> List[Dict]:
         """Get high-priority squeeze alerts"""
