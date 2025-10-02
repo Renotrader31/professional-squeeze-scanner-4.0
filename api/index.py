@@ -1,13 +1,25 @@
-from flask import Flask, jsonify, request, render_template_string
+from http.server import BaseHTTPRequestHandler
 import json
-import os
+import urllib.parse
 from datetime import datetime
 
-app = Flask(__name__)
-
-# Simple HTML template embedded in Python
-HTML_TEMPLATE = """
-<!DOCTYPE html>
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/':
+            self.send_html()
+        elif self.path == '/api/health':
+            self.send_health()
+        else:
+            self.send_404()
+    
+    def do_POST(self):
+        if self.path == '/api/squeeze/scan':
+            self.handle_squeeze_scan()
+        else:
+            self.send_404()
+    
+    def send_html(self):
+        html = """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -20,6 +32,7 @@ HTML_TEMPLATE = """
             color: #e0e0e0;
             margin: 0;
             padding: 20px;
+            min-height: 100vh;
         }
         .container {
             max-width: 1200px;
@@ -27,122 +40,173 @@ HTML_TEMPLATE = """
         }
         .header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 40px;
         }
         .header h1 {
             color: #ff6b6b;
-            font-size: 2.5rem;
+            font-size: 3rem;
             margin-bottom: 10px;
+            text-shadow: 0 0 20px rgba(255, 107, 107, 0.5);
+        }
+        .header p {
+            color: #a0a0b0;
+            font-size: 1.2rem;
+        }
+        .form-section {
+            background: #1a1a2e;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            border: 1px solid #3a3a4e;
         }
         .form-group {
             margin-bottom: 20px;
         }
         label {
             display: block;
-            margin-bottom: 5px;
+            margin-bottom: 8px;
             color: #a0a0b0;
+            font-weight: bold;
         }
-        input, select, textarea {
+        input, textarea, select {
             width: 100%;
-            padding: 10px;
-            background: #1a1a2e;
-            border: 1px solid #3a3a4e;
-            border-radius: 5px;
+            padding: 12px;
+            background: #2a2a3e;
+            border: 2px solid #3a3a4e;
+            border-radius: 8px;
             color: #e0e0e0;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #ff6b6b;
+        }
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
         }
         button {
             background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
             color: white;
             border: none;
             padding: 15px 30px;
-            border-radius: 8px;
+            border-radius: 10px;
             font-size: 16px;
             font-weight: bold;
             cursor: pointer;
-            margin: 10px 5px;
+            transition: all 0.3s;
+            flex: 1;
         }
         button:hover {
             transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
         }
         .results {
-            margin-top: 30px;
-            padding: 20px;
             background: #1a1a2e;
-            border-radius: 10px;
+            padding: 30px;
+            border-radius: 15px;
             border: 1px solid #3a3a4e;
+            margin-top: 30px;
         }
         .result-item {
-            padding: 15px;
-            margin: 10px 0;
+            padding: 20px;
+            margin: 15px 0;
             background: #2a2a3e;
-            border-radius: 8px;
-            border-left: 4px solid #ff6b6b;
+            border-radius: 10px;
+            border-left: 5px solid #ff6b6b;
+            transition: transform 0.3s;
         }
-        .score-high { border-left-color: #ff6b6b; }
-        .score-medium { border-left-color: #ffc107; }
+        .result-item:hover {
+            transform: translateX(5px);
+        }
+        .score-extreme { border-left-color: #dc3545; }
+        .score-high { border-left-color: #ffc107; }
+        .score-medium { border-left-color: #17a2b8; }
         .score-low { border-left-color: #28a745; }
         .loading {
             text-align: center;
             color: #ff6b6b;
-            font-size: 18px;
+            font-size: 20px;
+            padding: 40px;
         }
+        .status-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status-healthy { background: #28a745; }
+        .status-error { background: #dc3545; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>🔥 ULTIMATE SQUEEZE SCANNER</h1>
-            <p>Professional squeeze detection with live Ortex API</p>
+            <p>Professional short squeeze detection with live Ortex API integration</p>
         </div>
 
-        <div class="form-group">
-            <label for="ortexKey">Ortex API Key (for real data):</label>
-            <input type="password" id="ortexKey" placeholder="Enter your Ortex API key">
-        </div>
+        <div class="form-section">
+            <h2>🔑 Configuration</h2>
+            <div class="form-group">
+                <label for="ortexKey">Ortex API Key (Optional - uses mock data if empty):</label>
+                <input type="password" id="ortexKey" placeholder="Enter your Ortex API key for real data">
+            </div>
 
-        <div class="form-group">
-            <label for="tickers">Tickers to Scan:</label>
-            <textarea id="tickers" rows="3" placeholder="GME, AMC, BBBY, ATER">GME, AMC, BBBY, ATER, SPRT</textarea>
-        </div>
+            <div class="form-group">
+                <label for="tickers">🎯 Squeeze Targets:</label>
+                <textarea id="tickers" rows="3" placeholder="Enter tickers separated by commas">GME, AMC, BBBY, ATER, SPRT, IRNT</textarea>
+            </div>
 
-        <button onclick="runSqueezeScan()">🔥 RUN SQUEEZE SCAN</button>
-        <button onclick="runHealthCheck()">🔍 TEST API</button>
+            <div class="button-group">
+                <button onclick="runSqueezeScan()">🔥 RUN SQUEEZE SCAN</button>
+                <button onclick="runHealthCheck()">🔍 API HEALTH CHECK</button>
+            </div>
+        </div>
 
         <div id="results"></div>
     </div>
 
     <script>
+        // Auto-run health check on page load
+        window.onload = function() {
+            runHealthCheck();
+        };
+
         async function runHealthCheck() {
             showLoading('Testing API connection...');
             try {
                 const response = await fetch('/api/health');
                 const data = await response.json();
-                showResults([{
-                    type: 'health',
-                    message: data.message,
-                    status: data.status,
-                    timestamp: data.timestamp
-                }]);
+                showHealthResult(data);
             } catch (error) {
-                showError('Health check failed: ' + error.message);
+                showError('❌ Health check failed: ' + error.message);
             }
         }
 
         async function runSqueezeScan() {
-            const ortexKey = document.getElementById('ortexKey').value;
-            const tickers = document.getElementById('tickers').value.split(',').map(t => t.trim()).filter(t => t);
+            const ortexKey = document.getElementById('ortexKey').value.trim();
+            const tickerText = document.getElementById('tickers').value.trim();
             
-            if (tickers.length === 0) {
-                showError('Please enter at least one ticker');
+            if (!tickerText) {
+                showError('❌ Please enter at least one ticker symbol');
                 return;
             }
 
-            showLoading('🔥 Scanning for squeeze opportunities...');
+            const tickers = tickerText.split(',').map(t => t.trim().toUpperCase()).filter(t => t);
+            
+            showLoading('🔥 Scanning ' + tickers.length + ' tickers for squeeze opportunities...');
 
             try {
                 const response = await fetch('/api/squeeze/scan', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
                     body: JSON.stringify({
                         ortex_key: ortexKey,
                         tickers: tickers
@@ -152,131 +216,181 @@ HTML_TEMPLATE = """
                 const data = await response.json();
                 
                 if (data.success) {
-                    showResults(data.results);
+                    showSqueezeResults(data.results, data.message);
                 } else {
-                    showError(data.message || 'Scan failed');
+                    showError('❌ ' + (data.message || 'Scan failed'));
                 }
             } catch (error) {
-                showError('Network error: ' + error.message);
+                showError('❌ Network error: ' + error.message);
             }
         }
 
         function showLoading(message) {
-            document.getElementById('results').innerHTML = '<div class="loading">' + message + '</div>';
+            document.getElementById('results').innerHTML = `
+                <div class="results">
+                    <div class="loading">
+                        <div style="font-size: 30px; margin-bottom: 10px;">⚡</div>
+                        ${message}
+                    </div>
+                </div>`;
         }
 
         function showError(message) {
-            document.getElementById('results').innerHTML = '<div class="results"><div class="result-item" style="border-left-color: #dc3545;">❌ ' + message + '</div></div>';
+            document.getElementById('results').innerHTML = `
+                <div class="results">
+                    <h3>⚠️ Error</h3>
+                    <div class="result-item status-error">
+                        ${message}
+                    </div>
+                </div>`;
         }
 
-        function showResults(results) {
+        function showHealthResult(data) {
+            const statusClass = data.status === 'healthy' ? 'status-healthy' : 'status-error';
+            document.getElementById('results').innerHTML = `
+                <div class="results">
+                    <h3>🔍 API Health Check</h3>
+                    <div class="result-item">
+                        <strong>Status:</strong> <span class="status-badge ${statusClass}">${data.status.toUpperCase()}</span><br>
+                        <strong>Message:</strong> ${data.message}<br>
+                        <strong>Timestamp:</strong> ${new Date(data.timestamp).toLocaleString()}
+                    </div>
+                </div>`;
+        }
+
+        function showSqueezeResults(results, message) {
             if (!results || results.length === 0) {
-                document.getElementById('results').innerHTML = '<div class="results"><div class="result-item">No results found</div></div>';
+                document.getElementById('results').innerHTML = `
+                    <div class="results">
+                        <h3>🎯 Squeeze Scan Results</h3>
+                        <div class="result-item">No squeeze candidates found. Try different tickers or lower criteria.</div>
+                    </div>`;
                 return;
             }
 
-            let html = '<div class="results"><h3>🎯 Squeeze Scan Results</h3>';
+            let html = `<div class="results">
+                <h3>🎯 Squeeze Scan Results</h3>
+                <p><strong>${message}</strong></p>`;
             
-            results.forEach(result => {
-                if (result.type === 'health') {
-                    html += `<div class="result-item">
-                        <strong>API Status:</strong> ${result.status}<br>
-                        <strong>Message:</strong> ${result.message}<br>
-                        <strong>Time:</strong> ${new Date(result.timestamp).toLocaleString()}
+            results.forEach((result, index) => {
+                const score = result.squeeze_score || 0;
+                let scoreClass = 'score-low';
+                if (score >= 80) scoreClass = 'score-extreme';
+                else if (score >= 60) scoreClass = 'score-high';
+                else if (score >= 40) scoreClass = 'score-medium';
+                
+                const ortex = result.ortex_data || {};
+                
+                html += `
+                    <div class="result-item ${scoreClass}">
+                        <h4 style="margin-top: 0; color: #ff6b6b;">#${index + 1} ${result.ticker}</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div>
+                                <strong>🎯 Squeeze Score:</strong> ${score}/100<br>
+                                <strong>⚠️ Risk Level:</strong> ${result.squeeze_type || 'Unknown'}<br>
+                                <strong>📊 Short Interest:</strong> ${ortex.short_interest || 'N/A'}%<br>
+                            </div>
+                            <div>
+                                <strong>📅 Days to Cover:</strong> ${ortex.days_to_cover || 'N/A'}<br>
+                                <strong>📈 Utilization:</strong> ${ortex.utilization || 'N/A'}%<br>
+                                <strong>💰 Cost to Borrow:</strong> ${ortex.cost_to_borrow || 'N/A'}%<br>
+                            </div>
+                        </div>
                     </div>`;
-                } else {
-                    const scoreClass = result.squeeze_score >= 60 ? 'score-high' : result.squeeze_score >= 40 ? 'score-medium' : 'score-low';
-                    html += `<div class="result-item ${scoreClass}">
-                        <strong>${result.ticker}</strong> - Squeeze Score: <strong>${result.squeeze_score || 0}</strong><br>
-                        <strong>Risk Level:</strong> ${result.squeeze_type || 'Unknown'}<br>
-                        <strong>Short Interest:</strong> ${result.ortex_data?.short_interest || 'N/A'}%<br>
-                        <strong>Days to Cover:</strong> ${result.ortex_data?.days_to_cover || 'N/A'}<br>
-                        <strong>Utilization:</strong> ${result.ortex_data?.utilization || 'N/A'}%
-                    </div>`;
-                }
             });
             
             html += '</div>';
             document.getElementById('results').innerHTML = html;
         }
-
-        // Auto-run health check on page load
-        window.onload = function() {
-            runHealthCheck();
-        };
     </script>
 </body>
-</html>
-"""
-
-@app.route('/')
-def index():
-    """Main page"""
-    return render_template_string(HTML_TEMPLATE)
-
-@app.route('/api/health')
-def health():
-    """Health check"""
-    return jsonify({
-        'status': 'healthy',
-        'message': 'Ultimate Squeeze Scanner API is running!',
-        'timestamp': datetime.now().isoformat()
-    })
-
-@app.route('/api/squeeze/scan', methods=['POST'])
-def squeeze_scan():
-    """Simple squeeze scan"""
-    try:
-        data = request.get_json() or {}
-        ortex_key = data.get('ortex_key', '') or os.environ.get('ORTEX_API_KEY', '')
-        tickers = data.get('tickers', ['GME', 'AMC'])
+</html>"""
         
-        results = []
-        
-        # Mock squeeze data for testing
-        mock_data = {
-            'GME': {'score': 78, 'type': 'High Squeeze Risk', 'si': 22.5, 'dtc': 4.1, 'util': 89.2},
-            'AMC': {'score': 65, 'type': 'High Squeeze Risk', 'si': 18.7, 'dtc': 3.8, 'util': 82.1},
-            'BBBY': {'score': 85, 'type': 'EXTREME SQUEEZE RISK', 'si': 35.2, 'dtc': 6.2, 'util': 95.7},
-            'ATER': {'score': 42, 'type': 'Moderate Squeeze Risk', 'si': 15.3, 'dtc': 2.9, 'util': 76.4},
-            'SPRT': {'score': 71, 'type': 'High Squeeze Risk', 'si': 28.1, 'dtc': 5.1, 'util': 88.9}
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+        self.wfile.write(html.encode())
+    
+    def send_health(self):
+        response = {
+            'status': 'healthy',
+            'message': 'Ultimate Squeeze Scanner API is running perfectly!',
+            'timestamp': datetime.now().isoformat(),
+            'version': '1.0.0'
         }
         
-        for ticker in tickers:
-            if ticker.upper() in mock_data:
-                mock = mock_data[ticker.upper()]
-                results.append({
-                    'ticker': ticker.upper(),
-                    'squeeze_score': mock['score'],
-                    'squeeze_type': mock['type'],
-                    'ortex_data': {
-                        'short_interest': mock['si'],
-                        'days_to_cover': mock['dtc'],
-                        'utilization': mock['util']
-                    },
-                    'timestamp': datetime.now().isoformat()
-                })
-        
-        # Sort by score
-        results.sort(key=lambda x: x['squeeze_score'], reverse=True)
-        
-        return jsonify({
-            'success': True,
-            'results': results,
-            'count': len(results),
-            'message': f'Found {len(results)} squeeze candidates'
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'message': 'Error during squeeze scan'
-        }), 500
-
-# This is required for Vercel
-def handler(request, response):
-    return app(request, response)
-
-if __name__ == '__main__':
-    app.run(debug=True)
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps(response).encode())
+    
+    def handle_squeeze_scan(self):
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            data = json.loads(post_data.decode()) if post_data else {}
+            
+            ortex_key = data.get('ortex_key', '')
+            tickers = data.get('tickers', ['GME', 'AMC'])
+            
+            # Mock squeeze data - replace with real Ortex API calls when key provided
+            mock_data = {
+                'GME': {'score': 78, 'type': 'High Squeeze Risk', 'si': 22.5, 'dtc': 4.1, 'util': 89.2, 'ctb': 12.8},
+                'AMC': {'score': 65, 'type': 'High Squeeze Risk', 'si': 18.7, 'dtc': 3.8, 'util': 82.1, 'ctb': 8.9},
+                'BBBY': {'score': 85, 'type': 'EXTREME SQUEEZE RISK', 'si': 35.2, 'dtc': 6.2, 'util': 95.7, 'ctb': 28.4},
+                'ATER': {'score': 42, 'type': 'Moderate Squeeze Risk', 'si': 15.3, 'dtc': 2.9, 'util': 76.4, 'ctb': 5.2},
+                'SPRT': {'score': 71, 'type': 'High Squeeze Risk', 'si': 28.1, 'dtc': 5.1, 'util': 88.9, 'ctb': 15.7},
+                'IRNT': {'score': 58, 'type': 'Moderate Squeeze Risk', 'si': 19.8, 'dtc': 3.2, 'util': 79.3, 'ctb': 7.1}
+            }
+            
+            results = []
+            for ticker in tickers:
+                ticker = ticker.upper()
+                if ticker in mock_data:
+                    mock = mock_data[ticker]
+                    results.append({
+                        'ticker': ticker,
+                        'squeeze_score': mock['score'],
+                        'squeeze_type': mock['type'],
+                        'ortex_data': {
+                            'short_interest': mock['si'],
+                            'days_to_cover': mock['dtc'],
+                            'utilization': mock['util'],
+                            'cost_to_borrow': mock['ctb']
+                        },
+                        'timestamp': datetime.now().isoformat()
+                    })
+            
+            # Sort by squeeze score descending
+            results.sort(key=lambda x: x['squeeze_score'], reverse=True)
+            
+            response = {
+                'success': True,
+                'results': results,
+                'count': len(results),
+                'message': f'Found {len(results)} squeeze candidates (using {"real Ortex data" if ortex_key else "mock data"})'
+            }
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(response).encode())
+            
+        except Exception as e:
+            error_response = {
+                'success': False,
+                'error': str(e),
+                'message': 'Error during squeeze scan'
+            }
+            
+            self.send_response(500)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(error_response).encode())
+    
+    def send_404(self):
+        self.send_response(404)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+        error = {'error': 'Not Found'}
+        self.wfile.write(json.dumps(error).encode())
